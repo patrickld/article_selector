@@ -5,10 +5,7 @@ import pandas as pd
 import re
 from email.utils import parsedate_to_datetime
 import quopri
-import requests
 import urllib.parse
-import html2text
-from difflib import SequenceMatcher
 
 # Define your email account settings
 EMAIL_HOST = # example mail host like 'imap.gmail.com'
