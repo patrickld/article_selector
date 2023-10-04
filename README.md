@@ -49,6 +49,6 @@ Run the code within your Python environment.
 
 Utilize the "Article Selector" tool to streamline the process of curating and delivering newsletters containing top-selected articles.
 
-Note
+## Note
 These code snippets serve as examples and may require additional customization based on your specific email data and processing logic.
 
