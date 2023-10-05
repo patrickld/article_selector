@@ -13,7 +13,7 @@ def main():
     mail.logout()
 
     df = df_unprocessed.copy()
-    df = df[df['Link'].notna()].reset_index(drop=True)
+    df= df[df['Link'].notna()].reset_index(drop=True)
 
     # Apply parsing and caution function to create the subset DataFrame
     subset_df = df.groupby('Email ID', group_keys=False).apply(apply_and_print_caution).reset_index(drop=True)

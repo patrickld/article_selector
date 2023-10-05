@@ -6,12 +6,13 @@ import re
 from email.utils import parsedate_to_datetime
 import quopri
 import urllib.parse
+import config
 
 # Define your email account settings
-EMAIL_HOST = # example mail host like 'imap.gmail.com'
-EMAIL_PORT = 993  # For IMAP SSL
-EMAIL_USERNAME = # example mail address like 'mail@gmail.com'
-EMAIL_PASSWORD = # example mail pw like 'pw123'
+EMAIL_HOST = config.EMAIL_HOST
+EMAIL_PORT = config.EMAIL_PORT
+EMAIL_USERNAME = config.EMAIL_USERNAME
+EMAIL_PASSWORD = config.EMAIL_PASSWORD
 
 def decode_quoted_printable(encoded_string):
     return quopri.decodestring(encoded_string).decode('utf-8')
@@ -43,9 +44,14 @@ def extract_links_from_email(email_message):
 
 # Create a connection to the email server
 def connect_to_email_server():
-    mail = imaplib.IMAP4_SSL(EMAIL_HOST, EMAIL_PORT)
-    mail.login(EMAIL_USERNAME, EMAIL_PASSWORD)
-    return mail
+    try:
+        mail = imaplib.IMAP4_SSL(EMAIL_HOST, EMAIL_PORT)
+        mail.login(EMAIL_USERNAME, EMAIL_PASSWORD)
+        print("Connected to the email server successfully.")
+        return mail
+    except Exception as e:
+        print(f"Error connecting to the email server: {e}")
+        return None
 
 
 # Create a DataFrame from email content
