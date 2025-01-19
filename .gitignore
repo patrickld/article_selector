@@ -1,1 +1,7 @@
 config.py
+__pycache__/
+.DS_Store
+
+logs/application.log
+
+processed_data/

@@ -1,9 +1,10 @@
-import requests
-import urllib.parse
-import html2text
-from difflib import SequenceMatcher
 import re
+import urllib.parse
+from difflib import SequenceMatcher
+
+import html2text
 import pandas as pd  # Assuming you're using pandas for DataFrame operations
+import requests
 
 
 # Function to check if a URL is accessible and return the final URL
@@ -46,9 +47,16 @@ def remove_url_params(url):
     scheme = parsed_url.scheme
     netloc = parsed_url.netloc
     path = parsed_url.path
-    query = urllib.parse.urlencode([(k, v) for k, v in urllib.parse.parse_qsl(parsed_url.query) if not k.startswith('utm_')])
+    query = urllib.parse.urlencode(
+        [
+            (k, v)
+            for k, v in urllib.parse.parse_qsl(parsed_url.query)
+            if not k.startswith("utm_")
+        ]
+    )
     fragment = parsed_url.fragment
-    return urllib.parse.urlunparse((scheme, netloc, path, '', query, fragment))
+    return urllib.parse.urlunparse((scheme, netloc, path, "", query, fragment))
+
 
 # Define the process_links function
 def process_links(link):
@@ -57,12 +65,14 @@ def process_links(link):
 
     try:
         # Check if the link is a valid URL
-        if re.match(r'https?://\S+', link):
+        if re.match(r"https?://\S+", link):
             # Convert HTML to plain text
             plain_text_link = html_to_text(link)
 
             # Check for similarity with existing unique links
-            is_duplicate = any(check_similarity(link, unique_link) for unique_link in unique_links)
+            is_duplicate = any(
+                check_similarity(link, unique_link) for unique_link in unique_links
+            )
 
             if not is_duplicate:
                 unique_links.add(link)
@@ -78,21 +88,23 @@ def process_links(link):
     return final_links[0] if final_links else None
 
 
-def apply_and_print_caution(group, limit = 50):
+def apply_and_print_caution(group, limit=15):
     processed_rows = 0
 
     for index, row in group.iterrows():
-        link = row['Link']
+        link = row["Link"]
         processed_link = process_links(link)
 
         if processed_link:
-            group.at[index, 'Link'] = processed_link
+            group.at[index, "Link"] = processed_link
             processed_rows += 1
 
             if processed_rows >= limit:
                 break
 
     if len(group) > limit:
-        print(f"Caution: Only the first {limit} rows for Email ID {group['Email ID'].iloc[0]} have been transformed.")
+        print(
+            f"Caution: Only the first {limit} rows for Email ID {group['Email ID'].iloc[0]} have been transformed."
+        )
 
     return group.head(limit)

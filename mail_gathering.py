@@ -1,100 +1,101 @@
-import imaplib
 import email
-from bs4 import BeautifulSoup
+import imaplib
+from datetime import datetime, timedelta
+
 import pandas as pd
-import re
-from email.utils import parsedate_to_datetime
-import quopri
-import urllib.parse
-import config
 
-# Define your email account settings
-EMAIL_HOST = config.EMAIL_HOST
-EMAIL_PORT = config.EMAIL_PORT
-EMAIL_USERNAME = config.EMAIL_USERNAME
-EMAIL_PASSWORD = config.EMAIL_PASSWORD
-
-def decode_quoted_printable(encoded_string):
-    return quopri.decodestring(encoded_string).decode('utf-8')
+from common.parser import parse_raw_message
+from common.utils import logger
+from config import EMAIL_HOST, EMAIL_PASSWORD, EMAIL_PORT, EMAIL_USERNAME
 
 
-def extract_links_from_email(email_message):
-    links = []
-    email_content = ""
+def connect_to_email_server() -> imaplib.IMAP4_SSL | None:
+    """
+    Establishes a secure SSL connection to an email server using credentials from config.
 
-    for part in email_message.walk():
-        content_type = part.get_content_type()
-        payload = part.get_payload(decode=True)
+    Uses EMAIL_HOST, EMAIL_PORT, EMAIL_USERNAME and EMAIL_PASSWORD from config file
+    to create an IMAP4 SSL connection and authenticate.
 
-        if payload is not None:
-            payload = payload.decode('utf-8')
+    Returns:
+        imaplib.IMAP4_SSL: Connected and authenticated IMAP mail object if successful
+        None: If connection or authentication fails
 
-        if content_type == "text/html":
-            soup = BeautifulSoup(payload, 'html.parser')
-            links.extend([a['href'] for a in soup.find_all('a', href=True)])
-        elif content_type == "text/plain":
-            email_content += payload
-
-    urls = re.findall(r'(https?://\S+|\bwww\.\S+\.\w+\b|\b\S+\.\w+\b)', email_content)
-    urls = [url if url.startswith(('http://', 'https://')) else f'http://{url}' for url in urls]
-
-    links.extend(urls)
-    return links
-
-
-# Create a connection to the email server
-def connect_to_email_server():
+    Logs success or failure via logger.
+    """
     try:
         mail = imaplib.IMAP4_SSL(EMAIL_HOST, EMAIL_PORT)
         mail.login(EMAIL_USERNAME, EMAIL_PASSWORD)
-        print("Connected to the email server successfully.")
+        logger.info("Connected to the email server successfully.")
         return mail
     except Exception as e:
-        print(f"Error connecting to the email server: {e}")
+        logger.info(f"Error connecting to the email server: {e}")
         return None
 
 
-# Create a DataFrame from email content
-def create_dataframe(mail, mailbox='inbox'):
-    # Select the mailbox you want to analyze (e.g., 'inbox')
-    mail.select(mailbox)
+def create_dataframe(
+    mail: imaplib.IMAP4_SSL, label: str = "test", time_span: int = 7
+) -> pd.DataFrame:
+    """
+    Creates a DataFrame containing email data from the specified label and time period.
 
-    # Search for emails that match specific criteria (e.g., unread emails)
-    status, email_ids = mail.search(None, 'ALL')
+    Args:
+        mail (imaplib.IMAP4_SSL): Connected and authenticated IMAP mail object
+        label (str, optional): Email label/folder to search. Defaults to "test". If None, searches inbox.
+        time_span (int, optional): Number of days to look back for emails. Defaults to 7.
 
-    columns = ['Email ID', 'Sender Name', 'Sender Email', 'Subject', 'Received Time', 'Link']
-    df = pd.DataFrame(columns=columns)
+    Returns:
+        pd.DataFrame: DataFrame containing email data with columns:
+            - Email ID: The decoded email ID
+            - Sender Name: The sender's display name
+            - Sender Email: The sender's email address
+            - Subject: The email subject line
+            - Received Time: The email received timestamp
+            - Message: The email body as a string
 
-    # Create an empty list to store DataFrames for each email
-    dfs = []
+    Raises:
+        Exception: If unable to access the specified label
+        Exception: If error occurs while searching emails
+    """
+    search_date = (datetime.now() - timedelta(days=time_span)).strftime("%d-%b-%Y")
+    if label:
+        status, data = mail.select(label)
+        if status != "OK":
+            raise Exception(
+                f"Unable to access label '{label}'. Check if the label exists."
+            )
+        try:
+            status, email_ids = mail.search(
+                None, f'(SINCE "{search_date}")'
+            )  # mail.search(None, "ALL")
+        except Exception as e:
+            logger.error(f"Error searching emails for label '{label}': {e}")
+            raise e
+    else:
+        mail.select("inbox")
+        status, email_ids = mail.search(None, "ALL")
 
-    # Create a set to store unique links per email
-    unique_links = set()
+    email_ids = email_ids[0].split()
+    df = pd.DataFrame(
+        columns=[
+            "email_id",
+            "sender_name",
+            "sender_email",
+            "subject",
+            "received_time",
+            "message",
+        ]
+    )
 
-    # Loop through the email IDs
-    for email_id in email_ids[0].split():
-        if email_id.decode('utf-8') in ['40','41','42']: #== '5':
-            # Getting mail content, decoding it to string, and storing it as an object
-            status, email_data = mail.fetch(email_id, '(RFC822)')
-            raw_email = email_data[0][1].decode('utf-8')
-            email_message = email.message_from_string(raw_email)
+    for email_id in email_ids:
+        status, data = mail.fetch(
+            email_id, "(RFC822)"
+        )  # RFC822 is the standard format of the email
+        if status != "OK":
+            logger.error(f"Error when processing email {email_id}, status: {status}")
+            continue
 
-            # Extract subject and received time
-            subject = decode_quoted_printable(email_message['subject'])
-            received_time = parsedate_to_datetime(email_message['date'])
+        raw_email = data[0][1]
+        msg = email.message_from_bytes(raw_email)
+        df = pd.concat([df, parse_raw_message(msg, email_id)], ignore_index=True)
 
-            # Extract the sender's name from the "From" field
-            sender_name, sender_email = email.utils.parseaddr(email_message['from'])
-
-            # Extract links from the email
-            links = extract_links_from_email(email_message)
-
-            # Add links to the DataFrame
-            if links:
-                link_dicts = [{'Email ID': email_id.decode('utf-8'), 'Sender Name': sender_name, 'Sender Email': sender_email, 'Subject': subject, 'Received Time': received_time, 'Link': link} for link in links]
-                df = pd.DataFrame(link_dicts)
-                dfs.append(df)
-
-    # Concatenate all DataFrames into a single DataFrame
-    df = pd.concat(dfs, ignore_index=True)
     return df

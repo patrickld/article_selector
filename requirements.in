@@ -1,0 +1,18 @@
+# default libraries
+loguru
+pandas==2.1.1
+numpy==1.23.5 # numpy==2.0.2
+jupyterlab
+
+# email
+beautifulsoup4
+email
+imapclient
+html2text
+requests
+urllib3
+
+# processing
+black
+flake8
+isort
